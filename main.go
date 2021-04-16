@@ -106,7 +106,7 @@ func encryptCredentialsBig() {
 func encryptCredentials() []byte {
 	log.Print("File encryption example")
 
-	plaintext, err := ioutil.ReadFile(".env")
+	byteText, err := ioutil.ReadFile(".env")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func encryptCredentials() []byte {
 		log.Fatal(err)
 	}
 
-	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	ciphertext := gcm.Seal(nonce, nonce, byteText, nil)
 	// Save back to file
 	//err = ioutil.WriteFile(".env.encrypted", ciphertext, 0777)
 	//writeToFile(".env.enc", string(ciphertext))
@@ -197,8 +197,23 @@ func loadToEnv(decryptedCredentials []byte) {
 	}
 }
 
+func saveEncryptedToFile(ciphertext []byte) {
+	writeToFile(".env.enc", ciphertext)
+}
+
+func decryptFromFile() []byte {
+	byteText, err := ioutil.ReadFile(".env.enc")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return decryptCredentials(byteText)
+}
+
 func main() {
 	encryptedCredentials := encryptCredentials()
-	decryptedCredentials := decryptCredentials(encryptedCredentials)
+	saveEncryptedToFile(encryptedCredentials)
+	//decryptedCredentials := decryptCredentials(encryptedCredentials)
+	decryptedCredentials := decryptFromFile()
 	loadToEnv(decryptedCredentials)
 }
