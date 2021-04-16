@@ -39,12 +39,10 @@ func genSecret() []byte {
 		// handle error here
 	}
 
-	//fmt.Printf("%x", key)
 	sec, err := generateRandomString(32)
 
 	return []byte(sec)
 }
-
 
 func sourceEnvFileName(environment string) string{
 	return ".env." + environment
@@ -93,9 +91,7 @@ func encryptCredentials(environment string) []byte {
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, byteText, nil)
-	// Save back to file
-	//err = ioutil.WriteFile(".env.development.encrypted", ciphertext, 0777)
-	//writeToFile(".env.development.enc", string(ciphertext))
+
 	if err != nil {
 		log.Panic(err)
 	}
@@ -104,11 +100,6 @@ func encryptCredentials(environment string) []byte {
 }
 
 func decryptCredentials(ciphertext []byte, environment string) []byte {
-	//ciphertext, err := ioutil.ReadFile(".env.development.encrypted")
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
 	// The key should be 16 bytes (AES-128), 24 bytes (AES-192) or
 	// 32 bytes (AES-256)
 	key, err := ioutil.ReadFile(encKeyName(environment))
@@ -132,19 +123,10 @@ func decryptCredentials(ciphertext []byte, environment string) []byte {
 		log.Panic(err)
 	}
 
-	//err = ioutil.WriteFile(".env.development.decrypted", decryptedCredentialsText, 0777)
-	//if err != nil {
-	//	log.Panic(err)
-	//}
-
 	return decryptedCredentialsText
 }
 
 func loadToEnv(decryptedCredentials []byte) {
-	//err := godotenv.Load(".env.development.decrypted")
-	//if err != nil {
-	//	log.Fatal("Error loading .env.development file")
-	//}
 	credentialsMap, _ := godotenv.Unmarshal(string(decryptedCredentials))
 	for key, value := range credentialsMap {
 		os.Setenv(key, value)
@@ -196,9 +178,6 @@ func main() {
 	environment := flag.String("environment", "development", "Environment declaration")
 
 	flag.Parse()
-	//fmt.Println(*action)
-	//fmt.Println(*environment)
-	//fmt.Println(flag.Args())
 
 	switch *action {
 	case "encrypt":
