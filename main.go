@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"github.com/joho/godotenv"
 	"io"
@@ -44,69 +45,23 @@ func genSecret() []byte {
 	return []byte(sec)
 }
 
-func encryptCredentialsBig() {
-	infile, err := os.Open(".env")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer infile.Close()
 
-	// The key should be 16 bytes (AES-128), 24 bytes (AES-192) or
-	// 32 bytes (AES-256)
-	var key []byte
-	key, err = ioutil.ReadFile("secret.key")
-	if err != nil {
-		//log.Fatal(err)
-		key = genSecret()
-		writeToFile("secret.key", key)
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	// Never use more than 2^32 random nonces with a given key
-	// because of the risk of repeat.
-	iv := make([]byte, block.BlockSize())
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		log.Fatal(err)
-	}
-
-	outfile, err := os.OpenFile("ciphertext.enc", os.O_RDWR|os.O_CREATE, 0777)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer outfile.Close()
-
-	// The buffer size must be multiple of 16 bytes
-	buf := make([]byte, 1024)
-	stream := cipher.NewCTR(block, iv)
-	for {
-		n, err := infile.Read(buf)
-		if n > 0 {
-			stream.XORKeyStream(buf, buf[:n])
-			// Write into file
-			outfile.Write(buf[:n])
-		}
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			log.Printf("Read %d bytes: %v", n, err)
-			break
-		}
-	}
-	// Append the IV
-	outfile.Write(iv)
+func sourceEnvFileName(environment string) string{
+	return ".env." + environment
 }
 
-func encryptCredentials() []byte {
-	log.Print("File encryption example")
+func outputEnvFileName(environment string) string {
+	return sourceEnvFileName(environment) + ".enc"
+}
 
-	byteText, err := ioutil.ReadFile(".env")
+func encKeyName(environment string) string {
+	return environment + ".key"
+}
+
+func encryptCredentials(environment string) []byte {
+	//log.Print("File encryption example")
+
+	byteText, err := ioutil.ReadFile(sourceEnvFileName(environment))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,11 +69,11 @@ func encryptCredentials() []byte {
 	// The key should be 16 bytes (AES-128), 24 bytes (AES-192) or
 	// 32 bytes (AES-256)
 	var key []byte
-	key, err = ioutil.ReadFile("secret.key")
+	key, err = ioutil.ReadFile(encKeyName(environment))
 	if err != nil {
 		//log.Fatal(err)
 		key = genSecret()
-		writeToFile("secret.key", key)
+		writeToFile(encKeyName(environment), key)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -139,8 +94,8 @@ func encryptCredentials() []byte {
 
 	ciphertext := gcm.Seal(nonce, nonce, byteText, nil)
 	// Save back to file
-	//err = ioutil.WriteFile(".env.encrypted", ciphertext, 0777)
-	//writeToFile(".env.enc", string(ciphertext))
+	//err = ioutil.WriteFile(".env.development.encrypted", ciphertext, 0777)
+	//writeToFile(".env.development.enc", string(ciphertext))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -148,15 +103,15 @@ func encryptCredentials() []byte {
 	return ciphertext
 }
 
-func decryptCredentials(ciphertext []byte) []byte {
-	//ciphertext, err := ioutil.ReadFile(".env.encrypted")
+func decryptCredentials(ciphertext []byte, environment string) []byte {
+	//ciphertext, err := ioutil.ReadFile(".env.development.encrypted")
 	//if err != nil {
 	//	log.Fatal(err)
 	//}
 
 	// The key should be 16 bytes (AES-128), 24 bytes (AES-192) or
 	// 32 bytes (AES-256)
-	key, err := ioutil.ReadFile("secret.key")
+	key, err := ioutil.ReadFile(encKeyName(environment))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -177,7 +132,7 @@ func decryptCredentials(ciphertext []byte) []byte {
 		log.Panic(err)
 	}
 
-	//err = ioutil.WriteFile(".env.decrypted", decryptedCredentialsText, 0777)
+	//err = ioutil.WriteFile(".env.development.decrypted", decryptedCredentialsText, 0777)
 	//if err != nil {
 	//	log.Panic(err)
 	//}
@@ -186,34 +141,75 @@ func decryptCredentials(ciphertext []byte) []byte {
 }
 
 func loadToEnv(decryptedCredentials []byte) {
-	//err := godotenv.Load(".env.decrypted")
+	//err := godotenv.Load(".env.development.decrypted")
 	//if err != nil {
-	//	log.Fatal("Error loading .env file")
+	//	log.Fatal("Error loading .env.development file")
 	//}
 	credentialsMap, _ := godotenv.Unmarshal(string(decryptedCredentials))
 	for key, value := range credentialsMap {
 		os.Setenv(key, value)
-		fmt.Println(os.Getenv(key))
 	}
 }
 
-func saveEncryptedToFile(ciphertext []byte) {
-	writeToFile(".env.enc", ciphertext)
+func saveEncryptedToFile(ciphertext []byte, environment string) {
+	writeToFile(outputEnvFileName(environment), ciphertext)
 }
 
-func decryptFromFile() []byte {
-	byteText, err := ioutil.ReadFile(".env.enc")
+func decryptFromFile(environment string) []byte {
+	byteText, err := ioutil.ReadFile(outputEnvFileName(environment))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return decryptCredentials(byteText)
+	return decryptCredentials(byteText, environment)
+}
+
+func encryptScenario(environment string) {
+	encryptedCredentials := encryptCredentials(environment)
+	saveEncryptedToFile(encryptedCredentials, environment)
+	log.Print("Encrypted")
+}
+
+func loadScenario(environment string) {
+	decryptedCredentials := decryptFromFile(environment)
+	loadToEnv(decryptedCredentials)
+	log.Print("Loaded")
+}
+
+func decryptScenario(environment string) {
+	decryptedCredentials := decryptFromFile(environment)
+	writeToFile(sourceEnvFileName(environment), decryptedCredentials)
+	log.Print("Decrypted")
+}
+
+func showScenario(environment string) {
+	decryptedCredentials := decryptFromFile(environment)
+	credentialsMap, _ := godotenv.Unmarshal(string(decryptedCredentials))
+	for key, value := range credentialsMap {
+		fmt.Println(key, "=", value)
+	}
 }
 
 func main() {
-	encryptedCredentials := encryptCredentials()
-	saveEncryptedToFile(encryptedCredentials)
-	//decryptedCredentials := decryptCredentials(encryptedCredentials)
-	decryptedCredentials := decryptFromFile()
-	loadToEnv(decryptedCredentials)
+
+	action := flag.String("action", "encrypt", "Encrypt file")
+	environment := flag.String("environment", "development", "Environment declaration")
+
+	flag.Parse()
+	//fmt.Println(*action)
+	//fmt.Println(*environment)
+	//fmt.Println(flag.Args())
+
+	switch *action {
+	case "encrypt":
+		encryptScenario(*environment)
+	case "load":
+		loadScenario(*environment)
+	case "decrypt":
+		decryptScenario(*environment)
+	case "show":
+		showScenario(*environment)
+	default:
+		log.Print("Error: Undefined action '" + *action + "'")
+	}
 }
