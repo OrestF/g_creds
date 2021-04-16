@@ -26,22 +26,8 @@ func generateRandomString(n int) (string, error) {
 	return string(ret), nil
 }
 
-func writeToFile(filename string, text string) {
-	f, err := os.Create(filename)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer f.Close()
-
-	_, err2 := f.WriteString(text)
-
-	if err2 != nil {
-		log.Fatal(err2)
-	}
-
-	fmt.Println("File written")
+func writeToFile(filename string, text []byte) {
+	ioutil.WriteFile(filename, text, 0777)
 }
 
 func genSecret() []byte {
@@ -58,7 +44,7 @@ func genSecret() []byte {
 	return []byte(sec)
 }
 
-func encryptCredentials() {
+func encryptCredentialsBig() {
 	infile, err := os.Open(".env")
 	if err != nil {
 		log.Fatal(err)
@@ -72,7 +58,7 @@ func encryptCredentials() {
 	if err != nil {
 		//log.Fatal(err)
 		key = genSecret()
-		writeToFile("secret.key", string(key))
+		writeToFile("secret.key", key)
 	}
 
 	block, err := aes.NewCipher(key)
@@ -117,7 +103,7 @@ func encryptCredentials() {
 	outfile.Write(iv)
 }
 
-func encryptSmall() {
+func encryptCredentials() []byte {
 	log.Print("File encryption example")
 
 	plaintext, err := ioutil.ReadFile(".env")
@@ -132,7 +118,7 @@ func encryptSmall() {
 	if err != nil {
 		//log.Fatal(err)
 		key = genSecret()
-		writeToFile("secret.key", string(key))
+		writeToFile("secret.key", key)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -153,18 +139,20 @@ func encryptSmall() {
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 	// Save back to file
-	err = ioutil.WriteFile(".env.encrypted", ciphertext, 0777)
+	//err = ioutil.WriteFile(".env.encrypted", ciphertext, 0777)
 	//writeToFile(".env.enc", string(ciphertext))
 	if err != nil {
 		log.Panic(err)
 	}
+
+	return ciphertext
 }
 
-func decryptCredentials() {
-	ciphertext, err := ioutil.ReadFile(".env.encrypted")
-	if err != nil {
-		log.Fatal(err)
-	}
+func decryptCredentials(ciphertext []byte) []byte {
+	//ciphertext, err := ioutil.ReadFile(".env.encrypted")
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	// The key should be 16 bytes (AES-128), 24 bytes (AES-192) or
 	// 32 bytes (AES-256)
@@ -184,27 +172,33 @@ func decryptCredentials() {
 	}
 	nonce := ciphertext[:gcm.NonceSize()]
 	ciphertext = ciphertext[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	decryptedCredentialsText, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	err = ioutil.WriteFile(".env.decrypted", plaintext, 0777)
-	if err != nil {
-		log.Panic(err)
-	}
+	//err = ioutil.WriteFile(".env.decrypted", decryptedCredentialsText, 0777)
+	//if err != nil {
+	//	log.Panic(err)
+	//}
+
+	return decryptedCredentialsText
 }
 
-func loadToEnv() {
-	err := godotenv.Load(".env.decrypted")
-	if err != nil {
-		log.Fatal("Error loading .env file")
+func loadToEnv(decryptedCredentials []byte) {
+	//err := godotenv.Load(".env.decrypted")
+	//if err != nil {
+	//	log.Fatal("Error loading .env file")
+	//}
+	credentialsMap, _ := godotenv.Unmarshal(string(decryptedCredentials))
+	for key, value := range credentialsMap {
+		os.Setenv(key, value)
+		fmt.Println(os.Getenv(key))
 	}
 }
 
 func main() {
-	encryptSmall()
-	decryptCredentials()
-	loadToEnv()
-	//encryptCredentials()
+	encryptedCredentials := encryptCredentials()
+	decryptedCredentials := decryptCredentials(encryptedCredentials)
+	loadToEnv(decryptedCredentials)
 }
